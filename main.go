@@ -21,14 +21,14 @@ func goDotEnvVariable(key string) string {
 	return os.Getenv(key)
 }
 
+
 func main() {
-	// Carrega as variáveis do arquivo .env
+
 	emailPassword := goDotEnvVariable("EMAIL_PASSWORD")
 	dialerEmail := goDotEnvVariable("DIALER_EMAIL")
 	fromEmail := goDotEnvVariable("FROM_EMAIL")
 	toEmail := goDotEnvVariable("TO_EMAIL")
 
-	// Define a função de scraping
 	scrape := func() {
 		c := colly.NewCollector()
 		var isLiverpoolPlaying bool
@@ -54,14 +54,17 @@ func main() {
 					panic(err)
 				}
 			} else {
-				fmt.Println("O Liverpool não está jogando hoje.")
+				fmt.Println("O Liverpool não está jogando hoje!")
+
 			}
 		})
 		c.Visit(goDotEnvVariable("URL"))
 	}
 
 	now := time.Now()
-	sendTime := time.Date(now.Year(), now.Month(), now.Day(), 11, 31, 0, 0, now.Location())
+	fmt.Println(now)
+	sendTime := time.Date(now.Year(), now.Month(), now.Day(), 15, 40, 0, 0, now.Location())
+	fmt.Print(sendTime)
 
 	waitDuration := sendTime.Sub(now)
 	if waitDuration < 0 {
