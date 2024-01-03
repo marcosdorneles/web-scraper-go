@@ -35,7 +35,7 @@ func main() {
 		c.OnHTML("div.FixtureTitle_name__Wirsw", func(e *colly.HTMLElement) {
 			times := e.Text
 			fmt.Println("Times que jogam hoje:", times)
-			if strings.Contains(times, "Sampaio Corrêa Sub-20") {
+			if strings.Contains(times, "Liverpool") {
 				isLiverpoolPlaying = true
 			}
 		})
