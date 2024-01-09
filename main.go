@@ -21,59 +21,63 @@ func goDotEnvVariable(key string) string {
 	return os.Getenv(key)
 }
 
-
 func main() {
+	for {
+		emailPassword := goDotEnvVariable("EMAIL_PASSWORD")
+		dialerEmail := goDotEnvVariable("DIALER_EMAIL")
+		fromEmail := goDotEnvVariable("FROM_EMAIL")
+		toEmail := goDotEnvVariable("TO_EMAIL")
+		fmt.Println(toEmail)
 
-	emailPassword := goDotEnvVariable("EMAIL_PASSWORD")
-	dialerEmail := goDotEnvVariable("DIALER_EMAIL")
-	fromEmail := goDotEnvVariable("FROM_EMAIL")
-	toEmail := goDotEnvVariable("TO_EMAIL")
+		scrape := func() {
+			c := colly.NewCollector()
+			c.OnResponse(func(r *colly.Response) {
+				fmt.Println("Visited:", r.Request.URL)
 
-	scrape := func() {
-		c := colly.NewCollector()
-		var isLiverpoolPlaying bool
-		c.OnHTML("div.FixtureTitle_name__Wirsw", func(e *colly.HTMLElement) {
-			times := e.Text
-			fmt.Println("Times que jogam hoje:", times)
-			if strings.Contains(times, "Liverpool") {
-				isLiverpoolPlaying = true
-			}
-		})
-		c.OnScraped(func(r *colly.Response) {
-			if isLiverpoolPlaying {
-				fmt.Println("O Liverpool está jogando hoje!")
-				m := gomail.NewMessage()
-				m.SetHeader("From", fromEmail)
-				m.SetHeader("To", toEmail)
-				m.SetHeader("Subject", "Liverpool!")
-				m.SetBody("text/plain", "Hello, Liverpool is playing today!!")
+			})
 
-				d := gomail.NewDialer("smtp.gmail.com", 587, dialerEmail, emailPassword)
-				d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-				if err := d.DialAndSend(m); err != nil {
-					panic(err)
+			c.OnError(func(r *colly.Response, err error) {
+				fmt.Println("Request URL:", r.Request.URL, "failed with response:", r, "Error:", err)
+
+			})
+			var isLiverpoolPlaying bool
+			c.OnHTML("div.FixtureTitle_name__Wirsw", func(e *colly.HTMLElement) {
+				times := e.Text
+				fmt.Println("Times que jogam hoje:", times)
+				if strings.Contains(times, "Liverpool") {
+					isLiverpoolPlaying = true
+					fmt.Println("true")
+				} else {
+					fmt.Println("false")
 				}
-			} else {
-				fmt.Println("O Liverpool não está jogando hoje!")
+			})
+			c.OnScraped(func(r *colly.Response) {
+				if isLiverpoolPlaying {
+					fmt.Println("O Liverpool está jogando hoje!")
+					m := gomail.NewMessage()
+					m.SetHeader("From", fromEmail)
+					m.SetHeader("To", toEmail)
+					m.SetHeader("Subject", "Liverpool!")
+					m.SetBody("text/plain", "Hello, Liverpool is playing today!!")
 
+					d := gomail.NewDialer("smtp.gmail.com", 587, dialerEmail, emailPassword)
+					d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					if err := d.DialAndSend(m); err != nil {
+						panic(err)
+					}
+				} else {
+					fmt.Println("O Liverpool não está jogando hoje!")
+
+				}
+			})
+			if err := c.Visit(goDotEnvVariable("URL")); err != nil {
+				log.Printf("Error visiting the URL: %s", err)
 			}
-		})
-		c.Visit(goDotEnvVariable("URL"))
+		}
+
+
+		scrape()
+		time.Sleep(24 * time.Hour)
+
 	}
-
-	now := time.Now()
-	fmt.Println(now)
-	sendTime := time.Date(now.Year(), now.Month(), now.Day(), 15, 40, 0, 0, now.Location())
-	fmt.Print(sendTime)
-
-	waitDuration := sendTime.Sub(now)
-	if waitDuration < 0 {
-		sendTime = sendTime.Add(24 * time.Hour)
-		waitDuration = sendTime.Sub(now)
-	}
-
-	timer := time.NewTimer(waitDuration)
-	<-timer.C
-
-	scrape()
 }
