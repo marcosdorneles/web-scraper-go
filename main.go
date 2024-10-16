@@ -1,14 +1,14 @@
 package main
 
 import (
-	"crypto/tls"
+	"context"
 	"fmt"
 	"log"
 	"os"
-	"strings"
+	"strconv"
 	"time"
 
-	"github.com/gocolly/colly/v2"
+	"github.com/chromedp/chromedp"
 	"github.com/joho/godotenv"
 	"gopkg.in/gomail.v2"
 )
@@ -23,61 +23,65 @@ func goDotEnvVariable(key string) string {
 
 func main() {
 	for {
-		emailPassword := goDotEnvVariable("EMAIL_PASSWORD")
-		dialerEmail := goDotEnvVariable("DIALER_EMAIL")
-		fromEmail := goDotEnvVariable("FROM_EMAIL")
 		toEmail := goDotEnvVariable("TO_EMAIL")
 		fmt.Println(toEmail)
 
 		scrape := func() {
-			c := colly.NewCollector()
-			c.OnResponse(func(r *colly.Response) {
-				fmt.Println("Visited:", r.Request.URL)
+			ctx, cancel := chromedp.NewContext(context.Background())
+			defer cancel()
 
-			})
-
-			c.OnError(func(r *colly.Response, err error) {
-				fmt.Println("Request URL:", r.Request.URL, "failed with response:", r, "Error:", err)
-
-			})
-			var isLiverpoolPlaying bool
-			c.OnHTML("div.FixtureTitle_name__Wirsw", func(e *colly.HTMLElement) {
-				times := e.Text
-				fmt.Println("Times que jogam hoje:", times)
-				if strings.Contains(times, "Liverpool") {
-					isLiverpoolPlaying = true
-					fmt.Println("true")
-				} else {
-					fmt.Println("false")
-				}
-			})
-			c.OnScraped(func(r *colly.Response) {
-				if isLiverpoolPlaying {
-					fmt.Println("O Liverpool está jogando hoje!")
-					m := gomail.NewMessage()
-					m.SetHeader("From", fromEmail)
-					m.SetHeader("To", toEmail)
-					m.SetHeader("Subject", "Liverpool!")
-					m.SetBody("text/plain", "Hello, Liverpool is playing today!!")
-
-					d := gomail.NewDialer("smtp.gmail.com", 587, dialerEmail, emailPassword)
-					d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-					if err := d.DialAndSend(m); err != nil {
-						panic(err)
-					}
-				} else {
-					fmt.Println("O Liverpool não está jogando hoje!")
-
-				}
-			})
-			if err := c.Visit(goDotEnvVariable("URL")); err != nil {
-				log.Printf("Error visiting the URL: %s", err)
+			var buf []byte
+			url := goDotEnvVariable("URL")
+			if err := chromedp.Run(ctx, fullScreenshot(url, 90, &buf)); err != nil {
+				log.Fatal(err)
 			}
-		}
 
+			// Save the screenshot to a file
+			screenshotPath := "screenshot.png"
+			if err := os.WriteFile(screenshotPath, buf, 0644); err != nil {
+				log.Fatal(err)
+			}
+
+			fmt.Println("Screenshot saved as screenshot.png")
+
+			if err := sendEmail(toEmail, screenshotPath); err != nil {
+				log.Fatal(err)
+			}
+
+			fmt.Println("Screenshot sent to email")
+		}
 
 		scrape()
 		time.Sleep(24 * time.Hour)
-
 	}
+}
+
+func fullScreenshot(url string, quality int, res *[]byte) chromedp.Tasks {
+	return chromedp.Tasks{
+		chromedp.Navigate(url),
+		chromedp.Sleep(2 * time.Second),
+		chromedp.FullScreenshot(res, quality),
+	}
+}
+
+func sendEmail(toEmail, attachmentPath string) error {
+	fromEmail := goDotEnvVariable("FROM_EMAIL")
+	emailPassword := goDotEnvVariable("EMAIL_PASSWORD")
+	smtpHost := goDotEnvVariable("SMTP_HOST")
+	smtpPortStr := goDotEnvVariable("SMTP_PORT")
+	smtpPort, err := strconv.Atoi(smtpPortStr)
+	if err != nil {
+		log.Fatalf("Invalid SMTP_PORT: %v", err)
+	}
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", fromEmail)
+	m.SetHeader("To", toEmail)
+	m.SetHeader("Subject", "Daily Screenshot")
+	m.SetBody("text/plain", "Please find the attached screenshot.")
+	m.Attach(attachmentPath)
+
+	d := gomail.NewDialer(smtpHost, smtpPort, fromEmail, emailPassword)
+
+	return d.DialAndSend(m)
 }
